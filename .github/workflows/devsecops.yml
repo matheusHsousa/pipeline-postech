@@ -11,33 +11,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ------------------ CODE CHECKOUT ------------------
+      # ------------------------------------------
+      # CHECKOUT
+      # ------------------------------------------
       - name: Checkout código
         uses: actions/checkout@v4
 
-      # ------------------ JAVA / MAVEN ------------------
+      # ------------------------------------------
+      # JAVA + MAVEN
+      # ------------------------------------------
       - name: Instalar Java 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: "17"
+          distribution: "temurin"
 
       - name: Instalar Maven
         uses: stCarolas/setup-maven@v4
 
-      # ------------------ LINT ------------------
+      # ------------------------------------------
+      # LINT
+      # ------------------------------------------
       - name: Lint (Checkstyle)
         run: mvn checkstyle:check
 
-      # ------------------ TESTES ------------------
+      # ------------------------------------------
+      # TESTES
+      # ------------------------------------------
       - name: Executar Testes
         run: mvn test
 
-      # ------------------ BUILD ------------------
+      # ------------------------------------------
+      # BUILD
+      # ------------------------------------------
       - name: Build Maven
         run: mvn package -DskipTests=false
 
-      # ------------------ 🔥 SAST (SEMGRP) ------------------
+      # ------------------------------------------
+      # SEMGREP (SAST)
+      # ------------------------------------------
       - name: Semgrep SAST
         uses: returntocorp/semgrep-action@v1
         with:
@@ -46,25 +58,27 @@ jobs:
             p/java
             auto
 
-      # ------------------ FIX: Remover JAVA_HOME ------------------
-      - name: Remover JAVA_HOME do ambiente
+      # ------------------------------------------
+      # OWASP DEPENDENCY CHECK (SEM DOCKER)
+      # ------------------------------------------
+      - name: Instalar OWASP Dependency Check (Standalone)
         run: |
-          echo "Removendo JAVA_HOME para evitar conflito no container do Dependency-Check..."
-          echo "JAVA_HOME=" >> $GITHUB_ENV
-          echo "JAVA_HOME_17_X64=" >> $GITHUB_ENV
-          unset JAVA_HOME
-          unset JAVA_HOME_17_X64
+          wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.3/dependency-check-10.0.3-release.zip
+          unzip dependency-check-10.0.3-release.zip
+          sudo mv dependency-check /opt/dependency-check
 
-      # ------------------ DEPENDENCY CHECK ------------------
-      - name: OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: "Java-DevSecOps"
-          path: "."
-          format: "HTML"
-          out: "reports"
+      - name: Executar Dependency Check
+        run: |
+          /opt/dependency-check/bin/dependency-check.sh \
+            --project "Java-DevSecOps" \
+            --scan "." \
+            --format "HTML" \
+            --out "reports" \
+            --noupdate
 
-      # ------------------ CODEQL ------------------
+      # ------------------------------------------
+      # CODEQL
+      # ------------------------------------------
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -73,20 +87,24 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-      # ------------------ BLUE TEAM ------------------
+      # ------------------------------------------
+      # BLUE TEAM
+      # ------------------------------------------
       - name: Blue Team – Validar Configurações
         run: |
           echo "[BLUE] Verificando permissões..."
           echo "[BLUE] Validando variáveis e dependências críticas..."
 
-      # ------------------ PURPLE TEAM ------------------
+      # ------------------------------------------
+      # PURPLE TEAM
+      # ------------------------------------------
       - name: Purple Team – Registrar recomendações
         run: |
           echo "Registro de recomendações Red + Blue Team" > purple-team.log
 
-  # -------------------------------------------------------------------------
-  # DEPLOY BLUE/GREEN
-  # -------------------------------------------------------------------------
+  # =====================================================================
+  # DEPLOY BLUE / GREEN
+  # =====================================================================
   deploy-blue-green:
     needs: devsecops
     runs-on: ubuntu-latest
@@ -95,19 +113,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ------------------ DOCKER LOGIN ------------------
+      # ------------------------------------------
+      # DOCKER LOGIN
+      # ------------------------------------------
       - name: Login Docker Registry
         run: |
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
 
-      # ------------------ BUILD GREEN IMAGE ------------------
+      # ------------------------------------------
+      # BUILD / PUSH GREEN IMAGE
+      # ------------------------------------------
       - name: Build imagem GREEN
         run: docker build -t ${{ secrets.DOCKER_REPO }}/app:green .
 
       - name: Push imagem GREEN
         run: docker push ${{ secrets.DOCKER_REPO }}/app:green
 
-      # ------------------ DEPLOY NO SERVIDOR ------------------
+      # ------------------------------------------
+      # DEPLOY REMOTO
+      # ------------------------------------------
       - name: Deploy Green via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -119,12 +143,16 @@ jobs:
             docker pull ${{ secrets.DOCKER_REPO }}/app:green
             docker compose up -d app-green
 
-      # ------------------ HEALTH CHECK ------------------
+      # ------------------------------------------
+      # HEALTH CHECK
+      # ------------------------------------------
       - name: Testar ambiente GREEN
         run: |
           curl -f http://${{ secrets.SERVER_HOST }}/health || exit 1
 
-      # ------------------ PROMOVER GREEN ------------------
+      # ------------------------------------------
+      # PROMOVER GREEN
+      # ------------------------------------------
       - name: Promover GREEN para produção
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -135,7 +163,9 @@ jobs:
             sed -i 's/app-blue:/app-green:/g' nginx/nginx.conf
             docker compose restart nginx
 
-      # ------------------ ROLLBACK AUTOMÁTICO ------------------
+      # ------------------------------------------
+      # ROLLBACK AUTOMÁTICO
+      # ------------------------------------------
       - name: Rollback (se falhar)
         if: failure()
         uses: appleboy/ssh-action@v1.0.3
