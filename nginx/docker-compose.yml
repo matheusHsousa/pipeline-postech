@@ -1,23 +1,40 @@
 version: "3.9"
+
 services:
 
   app-blue:
     image: meu-registro/app:blue
     container_name: app-blue
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   app-green:
     image: meu-registro/app:green
     container_name: app-green
     restart: always
     scale: 1
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
 
   nginx:
     image: nginx:latest
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "80:80"
     depends_on:
       - app-blue
       - app-green
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
