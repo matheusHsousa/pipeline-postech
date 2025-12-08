@@ -54,28 +54,16 @@ jobs:
           wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
           unzip dependency-check-10.0.4-release.zip
           sudo mv dependency-check /opt/dependency-check
-          mkdir -p $GITHUB_WORKSPACE/dc-data
 
-      # ETAPA 1 → Atualizar banco de dados
-      - name: Atualizar banco de dados Dependency Check
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+      # Executar scanner SEM atualização
+      - name: Executar Dependency Check (sem update)
         run: |
-          /opt/dependency-check/bin/dependency-check.sh \
-            --project "DC-Update" \
-            --updateonly \
-            --data "$GITHUB_WORKSPACE/dc-data" \
-            --nvdApiKey "${NVD_API_KEY}"
-
-      # ETAPA 2 → Executar scanner
-      - name: Executar Dependency Check
-        run: |
+          mkdir -p reports
           /opt/dependency-check/bin/dependency-check.sh \
             --project "Java-DevSecOps" \
             --scan "." \
             --format "HTML" \
             --out "reports" \
-            --data "$GITHUB_WORKSPACE/dc-data" \
             --noupdate
 
       - name: Upload relatórios Dependency Check
