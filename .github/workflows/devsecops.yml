@@ -55,7 +55,13 @@ jobs:
           unzip dependency-check-10.0.4-release.zip
           sudo mv dependency-check /opt/dependency-check
 
-      # Executar scanner SEM atualização
+      # Criar banco vazio para evitar erro com --noupdate
+      - name: Criar banco vazio para Dependency Check
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/dc-data
+          touch $GITHUB_WORKSPACE/dc-data/dc.h2.db
+
+      # Executar scanner SEM atualizar banco
       - name: Executar Dependency Check (sem update)
         run: |
           mkdir -p reports
@@ -64,6 +70,7 @@ jobs:
             --scan "." \
             --format "HTML" \
             --out "reports" \
+            --data "$GITHUB_WORKSPACE/dc-data" \
             --noupdate
 
       - name: Upload relatórios Dependency Check
