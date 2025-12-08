@@ -51,25 +51,29 @@ jobs:
         run: |
           wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
           unzip dependency-check-10.0.4-release.zip
-          sudo mv dependency-check /opt/dependency-check
-          mkdir -p dc-data
+          mv dependency-check $GITHUB_WORKSPACE/dependency-check
+          mkdir -p $GITHUB_WORKSPACE/dc-data
 
-      # ETAPA 1 → Atualizar banco de dados (obrigatório antes do scan)
-      - name: Atualizar banco de dados do Dependency Check
+      # ETAPA 1 → Atualizar banco de dados
+      - name: Atualizar banco de dados Dependency Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          /opt/dependency-check/bin/dependency-check.sh \
+          $GITHUB_WORKSPACE/dependency-check/bin/dependency-check.sh \
             --project "DC-Update" \
-            --data "./dc-data"
+            --updateonly \
+            --data "$GITHUB_WORKSPACE/dc-data" \
+            --nvdApiKey "${NVD_API_KEY}"
 
-      # ETAPA 2 → Executar o scan usando apenas o cache local
+      # ETAPA 2 → Executar scanner
       - name: Executar Dependency Check
         run: |
-          /opt/dependency-check/bin/dependency-check.sh \
+          $GITHUB_WORKSPACE/dependency-check/bin/dependency-check.sh \
             --project "Java-DevSecOps" \
             --scan "." \
             --format "HTML" \
             --out "reports" \
-            --data "./dc-data" \
+            --data "$GITHUB_WORKSPACE/dc-data" \
             --noupdate
 
       - name: Upload relatórios Dependency Check
