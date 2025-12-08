@@ -47,25 +47,32 @@ jobs:
             auto
 
       # ------------------ OWASP DEPENDENCY CHECK ------------------
-      - name: Instalar OWASP Dependency Check (Standalone)
+      - name: Instalar OWASP Dependency Check
         run: |
           wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
           unzip dependency-check-10.0.4-release.zip
           sudo mv dependency-check /opt/dependency-check
           mkdir -p dc-data
 
+      # ETAPA 1 → Atualizar banco de dados (obrigatório antes do scan)
+      - name: Atualizar banco de dados do Dependency Check
+        run: |
+          /opt/dependency-check/bin/dependency-check.sh \
+            --project "DC-Update" \
+            --data "./dc-data"
+
+      # ETAPA 2 → Executar o scan usando apenas o cache local
       - name: Executar Dependency Check
         run: |
           /opt/dependency-check/bin/dependency-check.sh \
             --project "Java-DevSecOps" \
             --scan "." \
-            --out "reports" \
             --format "HTML" \
-            --disableCvssV40 true \
+            --out "reports" \
             --data "./dc-data" \
             --noupdate
 
-      - name: Upload Dependency-Check Reports
+      - name: Upload relatórios Dependency Check
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
