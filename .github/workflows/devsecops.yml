@@ -49,9 +49,11 @@ jobs:
       # ------------------ OWASP DEPENDENCY CHECK ------------------
       - name: Instalar OWASP Dependency Check
         run: |
+          mkdir -p /tmp/dc
+          cd /tmp/dc
           wget https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
           unzip dependency-check-10.0.4-release.zip
-          mv dependency-check $GITHUB_WORKSPACE/dependency-check
+          sudo mv dependency-check /opt/dependency-check
           mkdir -p $GITHUB_WORKSPACE/dc-data
 
       # ETAPA 1 → Atualizar banco de dados
@@ -59,7 +61,7 @@ jobs:
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
-          $GITHUB_WORKSPACE/dependency-check/bin/dependency-check.sh \
+          /opt/dependency-check/bin/dependency-check.sh \
             --project "DC-Update" \
             --updateonly \
             --data "$GITHUB_WORKSPACE/dc-data" \
@@ -68,7 +70,7 @@ jobs:
       # ETAPA 2 → Executar scanner
       - name: Executar Dependency Check
         run: |
-          $GITHUB_WORKSPACE/dependency-check/bin/dependency-check.sh \
+          /opt/dependency-check/bin/dependency-check.sh \
             --project "Java-DevSecOps" \
             --scan "." \
             --format "HTML" \
