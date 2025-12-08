@@ -46,6 +46,15 @@ jobs:
             p/java
             auto
 
+      # ------------------ FIX: Remover JAVA_HOME ------------------
+      - name: Remover JAVA_HOME do ambiente
+        run: |
+          echo "Removendo JAVA_HOME para evitar conflito no container do Dependency-Check..."
+          echo "JAVA_HOME=" >> $GITHUB_ENV
+          echo "JAVA_HOME_17_X64=" >> $GITHUB_ENV
+          unset JAVA_HOME
+          unset JAVA_HOME_17_X64
+
       # ------------------ DEPENDENCY CHECK ------------------
       - name: OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
@@ -123,8 +132,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_KEY }}
           script: |
-            cd /opt/devsecops
-            sed -i 's/app-blue/app-green/g' nginx.conf
+            sed -i 's/app-blue:/app-green:/g' nginx/nginx.conf
             docker compose restart nginx
 
       # ------------------ ROLLBACK AUTOMÁTICO ------------------
@@ -136,6 +144,5 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_KEY }}
           script: |
-            cd /opt/devsecops
-            sed -i 's/app-green/app-blue/g' nginx.conf
+            sed -i 's/app-green:/app-blue:/g' nginx/nginx.conf
             docker compose restart nginx
