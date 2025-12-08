@@ -1,4 +1,4 @@
-name: DevSecOps Pipeline Java + Fortify + Blue/Green
+name: DevSecOps Pipeline Java + Fortify
 
 on:
   push:
@@ -6,24 +6,17 @@ on:
   pull_request:
     branches: [ "main" ]
 
-permissions:
-  actions: read
-  contents: read
-  security-events: write
-
 jobs:
-
-  # =====================================================================
-  # JOB 1 — DEVSECOPS (build, testes, SAST, Fortify, Dependency Scan)
-  # =====================================================================
   devsecops:
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------ CODE CHECKOUT ------------------
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Instalar Java
+      # ------------------ JAVA / MAVEN ------------------
+      - name: Instalar Java 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -32,40 +25,48 @@ jobs:
       - name: Instalar Maven
         uses: stCarolas/setup-maven@v4
 
-      # ---------- LINT ----------
-      - name: Lint com Checkstyle
+      # ------------------ LINT ------------------
+      - name: Lint (Checkstyle)
         run: mvn checkstyle:check
 
-      # ---------- TESTES ----------
+      # ------------------ TESTES ------------------
       - name: Executar Testes
         run: mvn test
 
-      # ---------- BUILD ----------
-      - name: Build
+      # ------------------ BUILD ------------------
+      - name: Build Maven
         run: mvn package -DskipTests=false
 
-      # ---------- FORTIFY SCA ----------
-      - name: Instalar Fortify Community Edition
+      # ------------------ FORTIFY CE ------------------
+      - name: Baixar Fortify CE (última versão)
         run: |
-          wget https://github.com/fortify/FortifyCE/releases/latest/download/fortify-ce-linux.tar.gz
-          tar -xzf fortify-ce-linux.tar.gz
+          LATEST_URL=$(curl -s https://api.github.com/repos/fortify/FortifyCE/releases/latest \
+            | grep browser_download_url \
+            | grep linux \
+            | cut -d '"' -f 4)
+
+          echo "Baixando: $LATEST_URL"
+          wget $LATEST_URL -O fortify_ce.tar.gz
+          tar -xzf fortify_ce.tar.gz
 
       - name: Fortify Translate
         run: |
-          fortify-ce/bin/fortify translate -b devsecops-build -source src
+          DIR=$(ls -d Fortify_CE*/)
+          $DIR/bin/fortify translate -b devsecops-build -source src
 
       - name: Fortify Scan
         run: |
-          fortify-ce/bin/fortify scan -b devsecops-build -f fortify-scan.fpr
+          DIR=$(ls -d Fortify_CE*/)
+          $DIR/bin/fortify scan -b devsecops-build -f fortify-scan.fpr
 
-      # ---------- DEPENDENCY SCAN ----------
-      - name: Scan OWASP Dependency Check
+      # ------------------ DEPENDENCY CHECK ------------------
+      - name: OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
           project: "Java-DevSecOps"
           path: "."
 
-      # ---------- SAST (CodeQL) ----------
+      # ------------------ CODEQL ------------------
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -74,43 +75,41 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-      # ---------- BLUE TEAM ----------
-      - name: Verificação de segurança Blue Team
+      # ------------------ BLUE TEAM ------------------
+      - name: Blue Team – Validar Configurações
         run: |
-          echo "Verificando variáveis sensíveis, permissões e dependências críticas..."
+          echo "[BLUE] Verificando permissões..."
+          echo "[BLUE] Validando variáveis e dependências críticas..."
 
-      # ---------- PURPLE TEAM ----------
-      - name: Registrar Achados Purple Team
+      # ------------------ PURPLE TEAM ------------------
+      - name: Purple Team – Registrar recomendações
         run: |
-          echo "Integrando recomendações Red + Blue Team" > purple-team.log
+          echo "Registro de recomendações Red + Blue Team" > purple-team.log
 
-
-  # =====================================================================
-  # JOB 2 — BLUE/GREEN DEPLOYMENT
-  # =====================================================================
+  # -------------------------------------------------------------------------
+  # DEPLOY BLUE/GREEN
+  # -------------------------------------------------------------------------
   deploy-blue-green:
     needs: devsecops
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ---------------- DOCKER BUILD ----------------
+      # ------------------ DOCKER LOGIN ------------------
       - name: Login Docker Registry
         run: |
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
 
+      # ------------------ BUILD GREEN IMAGE ------------------
       - name: Build imagem GREEN
-        run: |
-          docker build -t meu-registro/app:green .
+        run: docker build -t ${{ secrets.DOCKER_REPO }}/app:green .
 
       - name: Push imagem GREEN
-        run: |
-          docker push meu-registro/app:green
+        run: docker push ${{ secrets.DOCKER_REPO }}/app:green
 
-      # ---------------- DEPLOY GREEN ----------------
+      # ------------------ DEPLOY NO SERVIDOR ------------------
       - name: Deploy Green via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -119,21 +118,15 @@ jobs:
           key: ${{ secrets.SERVER_KEY }}
           script: |
             cd /opt/devsecops
-            docker pull meu-registro/app:green
+            docker pull ${{ secrets.DOCKER_REPO }}/app:green
             docker compose up -d app-green
 
-      # ---------------- HEALTH CHECK ----------------
+      # ------------------ HEALTH CHECK ------------------
       - name: Testar ambiente GREEN
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_KEY }}
-          script: |
-            echo "Testando /health..."
-            curl -f http://localhost/health || exit 1
+        run: |
+          curl -f http://${{ secrets.SERVER_HOST }}/health || exit 1
 
-      # ---------------- PROMOTE GREEN → BLUE ----------------
+      # ------------------ PROMOVER GREEN ------------------
       - name: Promover GREEN para produção
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -144,7 +137,7 @@ jobs:
             sed -i 's/app-blue:/app-green:/g' nginx/nginx.conf
             docker compose restart nginx
 
-      # ---------------- ROLLBACK AUTOMÁTICO ----------------
+      # ------------------ ROLLBACK AUTOMÁTICO ------------------
       - name: Rollback (se falhar)
         if: failure()
         uses: appleboy/ssh-action@v1.0.3
@@ -153,6 +146,5 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_KEY }}
           script: |
-            echo "Falha detectada! Voltando para BLUE..."
             sed -i 's/app-green:/app-blue:/g' nginx/nginx.conf
             docker compose restart nginx
