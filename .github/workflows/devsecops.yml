@@ -40,24 +40,26 @@ jobs:
       # ------------------ FORTIFY CE ------------------
       - name: Baixar Fortify CE (última versão)
         run: |
+          sudo apt-get update && sudo apt-get install -y jq
+
           LATEST_URL=$(curl -s https://api.github.com/repos/fortify/FortifyCE/releases/latest \
-            | grep browser_download_url \
-            | grep linux \
-            | cut -d '"' -f 4)
+            | jq -r '.assets[] | select(.name | contains("tar.gz")) | .browser_download_url')
 
           echo "Baixando: $LATEST_URL"
-          wget $LATEST_URL -O fortify_ce.tar.gz
+          wget "$LATEST_URL" -O fortify_ce.tar.gz
           tar -xzf fortify_ce.tar.gz
 
       - name: Fortify Translate
         run: |
           DIR=$(ls -d Fortify_CE*/)
-          $DIR/bin/fortify translate -b devsecops-build -source src
+          echo "Usando diretório: $DIR"
+          $DIR/bin/foxt -b devsecops-build -source src
 
       - name: Fortify Scan
         run: |
           DIR=$(ls -d Fortify_CE*/)
-          $DIR/bin/fortify scan -b devsecops-build -f fortify-scan.fpr
+          echo "Usando diretório: $DIR"
+          $DIR/bin/foxs -b devsecops-build -f fortify-scan.fpr
 
       # ------------------ DEPENDENCY CHECK ------------------
       - name: OWASP Dependency Check
