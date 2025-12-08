@@ -1,4 +1,4 @@
-name: DevSecOps Pipeline Java + Fortify
+name: DevSecOps Pipeline Java
 
 on:
   push:
@@ -37,38 +37,14 @@ jobs:
       - name: Build Maven
         run: mvn package -DskipTests=false
 
-      # ------------------ FORTIFY CE ------------------
-      - name: Baixar Fortify CE (última versão)
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq unzip
-
-          echo "🔎 Buscando asset ZIP do FortifyCE..."
-          LATEST_URL=$(curl -s https://api.github.com/repos/fortify/FortifyCE/releases/latest \
-            | jq -r '.assets[] | select(.name | test("linux.*\\.zip$")) | .browser_download_url')
-
-          if [ -z "$LATEST_URL" ]; then
-            echo "⚠ Nenhum ZIP linux encontrado. Usando ZIP universal..."
-            LATEST_URL=$(curl -s https://api.github.com/repos/fortify/FortifyCE/releases/latest \
-              | jq -r '.assets[] | select(.name | test("\\.zip$")) | .browser_download_url')
-          fi
-
-          echo "Baixando: $LATEST_URL"
-          wget "$LATEST_URL" -O fortify_ce.zip
-          unzip fortify_ce.zip
-
-      - name: Fortify Translate
-        run: |
-          DIR=$(ls -d Fortify_CE*/)
-          echo "Usando diretório: $DIR"
-          chmod +x $DIR/bin/foxt
-          $DIR/bin/foxt -b devsecops-build -source src
-
-      - name: Fortify Scan
-        run: |
-          DIR=$(ls -d Fortify_CE*/)
-          echo "Usando diretório: $DIR"
-          chmod +x $DIR/bin/foxs
-          $DIR/bin/foxs -b devsecops-build -f fortify-scan.fpr
+      # ------------------ 🔥 SAST (SEMGRP) ------------------
+      - name: Semgrep SAST
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/owasp-top-ten
+            p/java
+            auto
 
       # ------------------ DEPENDENCY CHECK ------------------
       - name: OWASP Dependency Check
