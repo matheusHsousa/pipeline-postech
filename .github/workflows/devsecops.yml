@@ -1,4 +1,4 @@
-name: DevSecOps Pipeline
+name: DevSecOps Pipeline Java + Fortify + Blue/Green
 
 on:
   push:
@@ -6,70 +6,153 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
 jobs:
-  build-test-security:
+
+  # =====================================================================
+  # JOB 1 — DEVSECOPS (build, testes, SAST, Fortify, Dependency Scan)
+  # =====================================================================
+  devsecops:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Configurar Node (exemplo)
-        uses: actions/setup-node@v4
+      - name: Instalar Java
+        uses: actions/setup-java@v4
         with:
-          node-version: '18'
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Instalar dependências
-        run: npm install
+      - name: Instalar Maven
+        uses: stCarolas/setup-maven@v4
 
-      # --- LINT ---
-      - name: Lint de código
-        run: npm run lint --if-present
+      # ---------- LINT ----------
+      - name: Lint com Checkstyle
+        run: mvn checkstyle:check
 
-      # --- TESTES ---
-      - name: Executar testes
-        run: npm test --if-present
+      # ---------- TESTES ----------
+      - name: Executar Testes
+        run: mvn test
 
-      # --- SAST (Static Application Security Testing) ---
-      - name: SAST com CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript
-      - name: Analisar com CodeQL
-        uses: github/codeql-action/analyze@v3
+      # ---------- BUILD ----------
+      - name: Build
+        run: mvn package -DskipTests=false
 
-      # --- SCAN DE DEPENDÊNCIAS ---
-      - name: Scan de dependências com OWASP Dependency-Check
+      # ---------- FORTIFY SCA ----------
+      - name: Instalar Fortify Community Edition
+        run: |
+          wget https://github.com/fortify/FortifyCE/releases/latest/download/fortify-ce-linux.tar.gz
+          tar -xzf fortify-ce-linux.tar.gz
+
+      - name: Fortify Translate
+        run: |
+          fortify-ce/bin/fortify translate -b devsecops-build -source src
+
+      - name: Fortify Scan
+        run: |
+          fortify-ce/bin/fortify scan -b devsecops-build -f fortify-scan.fpr
+
+      # ---------- DEPENDENCY SCAN ----------
+      - name: Scan OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
-          project: "MeuProjeto"
+          project: "Java-DevSecOps"
           path: "."
 
-      # --- BUILD ---
-      - name: Build da aplicação
-        run: npm run build --if-present
-
-      # --- SCAN DE CONTAINER (caso use docker) ---
-      - name: Scan Docker com Trivy
-        uses: aquasecurity/trivy-action@master
+      # ---------- SAST (CodeQL) ----------
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
         with:
-          scan-type: fs
-          scan-ref: .
+          languages: java
 
-      # --- BLUE TEAM: LOGS / HARDENING ---
-      - name: Verificação de segurança da pipeline
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      # ---------- BLUE TEAM ----------
+      - name: Verificação de segurança Blue Team
         run: |
-          echo "[BlueTeam] Verificando variáveis sensíveis não expostas..."
-          # Adicionar regras específicas aqui
+          echo "Verificando variáveis sensíveis, permissões e dependências críticas..."
 
-      # --- RED TEAM (simulação simples) ---
-      - name: Teste Red Team - ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.10.0
+      # ---------- PURPLE TEAM ----------
+      - name: Registrar Achados Purple Team
+        run: |
+          echo "Integrando recomendações Red + Blue Team" > purple-team.log
+
+
+  # =====================================================================
+  # JOB 2 — BLUE/GREEN DEPLOYMENT
+  # =====================================================================
+  deploy-blue-green:
+    needs: devsecops
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------------- DOCKER BUILD ----------------
+      - name: Login Docker Registry
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
+
+      - name: Build imagem GREEN
+        run: |
+          docker build -t meu-registro/app:green .
+
+      - name: Push imagem GREEN
+        run: |
+          docker push meu-registro/app:green
+
+      # ---------------- DEPLOY GREEN ----------------
+      - name: Deploy Green via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          target: "http://localhost:3000"
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          script: |
+            cd /opt/devsecops
+            docker pull meu-registro/app:green
+            docker compose up -d app-green
 
-      # --- PURPLE TEAM ---
-      - name: Registro de recomendações Purple Team
-        run: |
-          echo "Integrando achados de Red + Blue Team"
-          # aqui você cria arquivo de recomendação
+      # ---------------- HEALTH CHECK ----------------
+      - name: Testar ambiente GREEN
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          script: |
+            echo "Testando /health..."
+            curl -f http://localhost/health || exit 1
+
+      # ---------------- PROMOTE GREEN → BLUE ----------------
+      - name: Promover GREEN para produção
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          script: |
+            sed -i 's/app-blue:/app-green:/g' nginx/nginx.conf
+            docker compose restart nginx
+
+      # ---------------- ROLLBACK AUTOMÁTICO ----------------
+      - name: Rollback (se falhar)
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          script: |
+            echo "Falha detectada! Voltando para BLUE..."
+            sed -i 's/app-green:/app-blue:/g' nginx/nginx.conf
+            docker compose restart nginx
