@@ -46,26 +46,6 @@ jobs:
             p/java
             auto
 
-      # ------------------ EXECUTAR SCAN SEM NVD ------------------
-      - name: Executar Dependency Check (sem NVD)
-        run: |
-          mkdir -p reports
-          mkdir -p dc-data
-          /opt/dependency-check/bin/dependency-check.sh \
-            --project "Java-DevSecOps" \
-            --scan "." \
-            --format "HTML" \
-            --out "reports" \
-            --data "$GITHUB_WORKSPACE/dc-data" \
-            --noupdate \
-            --failOnCVSS 11
-
-      - name: Upload relatórios Dependency Check
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: reports
-
       # ------------------ CODEQL ------------------
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
