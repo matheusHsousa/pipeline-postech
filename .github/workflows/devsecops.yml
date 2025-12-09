@@ -61,8 +61,8 @@ jobs:
           cd /tmp/dc
           wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
           unzip dependency-check-10.0.4-release.zip
-          DC_DIR=$(ls -d */ | grep dependency-check | head -n 1 | sed 's#/##')
-          sudo rm -rf /opt/dependency-check || true
+          DC_DIR=$(ls -d dependency-check*)
+          sudo rm -rf /opt/dependency-check
           sudo mv "$DC_DIR" /opt/dependency-check
           sudo chmod -R +x /opt/dependency-check/bin
 
@@ -78,7 +78,6 @@ jobs:
             --out "reports" \
             --data "$GITHUB_WORKSPACE/dc-data" \
             --noupdate \
-            --disableNvd \
             --failOnCVSS 11
 
       - name: Upload relatórios Dependency Check
@@ -106,7 +105,6 @@ jobs:
       - name: Purple Team – Registrar recomendações
         run: |
           echo "Registro de recomendações Red + Blue Team" > purple-team.log
-
 
   # -------------------------------------------------------------------------
   # DEPLOY BLUE/GREEN
