@@ -47,7 +47,6 @@ jobs:
             auto
 
       # ------------------ OWASP DEPENDENCY CHECK ------------------
-      # Cache para o banco de dados do Dependency-Check (dc-data)
       - name: Cache Dependency-Check DB
         uses: actions/cache@v4
         with:
@@ -58,36 +57,20 @@ jobs:
 
       - name: Instalar OWASP Dependency Check
         run: |
-          set -e
           mkdir -p /tmp/dc
           cd /tmp/dc
           wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
           unzip dependency-check-10.0.4-release.zip
-          # Ajuste do nome do diretório caso venha com versão no nome
-          if [ -d dependency-check ]; then
-            sudo rm -rf /opt/dependency-check || true
-            sudo mv dependency-check /opt/dependency-check
-          else
-            # encontra o diretório que começa com dependency-check
-            DC_DIR=$(ls -d */ | grep dependency-check | head -n 1 | sed 's#/##')
-            sudo rm -rf /opt/dependency-check || true
-            sudo mv "$DC_DIR" /opt/dependency-check
-          fi
-          sudo chmod -R +x /opt/dependency-check/bin || true
+          DC_DIR=$(ls -d */ | grep dependency-check | head -n 1 | sed 's#/##')
+          sudo rm -rf /opt/dependency-check || true
+          sudo mv "$DC_DIR" /opt/dependency-check
+          sudo chmod -R +x /opt/dependency-check/bin
 
-      # Baixar/atualizar a base de dados do Dependency-Check (garante existência)
-      - name: Atualizar banco do Dependency-Check (update only)
-        run: |
-          mkdir -p dc-data
-          /opt/dependency-check/bin/dependency-check.sh --updateonly --data "$GITHUB_WORKSPACE/dc-data"
-
-      # Executar scanner (não quebra o job por vulnerabilidades)
-      - name: Executar Dependency Check (scan)
-        env:
-          # assegura que o java seja encontrado
-          JAVA_HOME: ${{ env.JAVA_HOME }}
+      # ------------------ EXECUTAR SCAN SEM NVD ------------------
+      - name: Executar Dependency Check (sem NVD)
         run: |
           mkdir -p reports
+          mkdir -p dc-data
           /opt/dependency-check/bin/dependency-check.sh \
             --project "Java-DevSecOps" \
             --scan "." \
@@ -95,8 +78,8 @@ jobs:
             --out "reports" \
             --data "$GITHUB_WORKSPACE/dc-data" \
             --noupdate \
+            --disableNvd \
             --failOnCVSS 11
-        # Observação: --failOnCVSS 11 evita que o step falhe devido a CVSS (CVSS max = 10)
 
       - name: Upload relatórios Dependency Check
         uses: actions/upload-artifact@v4
@@ -123,6 +106,7 @@ jobs:
       - name: Purple Team – Registrar recomendações
         run: |
           echo "Registro de recomendações Red + Blue Team" > purple-team.log
+
 
   # -------------------------------------------------------------------------
   # DEPLOY BLUE/GREEN
