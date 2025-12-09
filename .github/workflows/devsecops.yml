@@ -48,7 +48,6 @@ jobs:
           languages: java
 
       - name: Build Java para CodeQL
-        # Garante que todos os arquivos Java compilam e podem ser analisados
         run: mvn clean compile
 
       - name: Perform CodeQL Analysis
@@ -75,7 +74,7 @@ jobs:
           echo "Registro de recomendações Red + Blue Team" > purple-team.log
 
   # -------------------------------------------------------------------------
-  # DEPLOY BLUE/GREEN
+  # DEPLOY BLUE/GREEN SIMULADO
   # -------------------------------------------------------------------------
   deploy-blue-green:
     needs: devsecops
@@ -85,19 +84,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ------------------ DOCKER LOGIN ------------------
-      - name: Login Docker Registry
-        run: |
-          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
+      # ------------------ BUILD IMAGEM LOCAL ------------------
+      - name: Build imagem BLUE
+        run: docker build -t app:blue .
 
-      # ------------------ BUILD GREEN IMAGE ------------------
       - name: Build imagem GREEN
-        run: docker build -t ${{ secrets.DOCKER_REPO }}/app:green .
+        run: docker build -t app:green .
 
-      - name: Push imagem GREEN
-        run: docker push ${{ secrets.DOCKER_REPO }}/app:green
+      # ------------------ DEPLOY SIMULADO ------------------
+      - name: Deploy Blue via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_KEY }}
+          script: |
+            cd /opt/devsecops
+            docker compose up -d app-blue
 
-      # ------------------ DEPLOY NO SERVIDOR ------------------
       - name: Deploy Green via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -106,7 +110,6 @@ jobs:
           key: ${{ secrets.SERVER_KEY }}
           script: |
             cd /opt/devsecops
-            docker pull ${{ secrets.DOCKER_REPO }}/app:green
             docker compose up -d app-green
 
       # ------------------ HEALTH CHECK ------------------
