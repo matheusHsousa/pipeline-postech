@@ -52,8 +52,12 @@ jobs:
         with:
           languages: java
 
+      - name: Build Java for CodeQL
+        run: mvn clean compile
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
+
 
       # ------------------ BLUE TEAM ------------------
       - name: Blue Team – Validar Configurações
