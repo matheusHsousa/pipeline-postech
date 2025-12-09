@@ -1,4 +1,4 @@
-name: DevSecOps Pipeline Java
+name: DevSecOps Pipeline Java (Simulado)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  security-events: write  # Necessário para CodeQL upload em branches internas
+  security-events: write  # Para CodeQL upload em branches internas
 
 jobs:
   devsecops:
@@ -91,48 +91,21 @@ jobs:
           echo "[SIMULAÇÃO] Build da imagem GREEN concluída"
 
       # ------------------ DEPLOY SIMULADO ------------------
-      - name: Deploy Blue via SSH (simulado)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_KEY }}
-          script: |
-            cd /opt/devsecops
-            echo "[SIMULAÇÃO] Deploy app-blue realizado"
+      - name: Deploy Blue (simulado)
+        run: echo "[SIMULAÇÃO] Deploy app-blue realizado"
 
-      - name: Deploy Green via SSH (simulado)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_KEY }}
-          script: |
-            cd /opt/devsecops
-            echo "[SIMULAÇÃO] Deploy app-green realizado"
+      - name: Deploy Green (simulado)
+        run: echo "[SIMULAÇÃO] Deploy app-green realizado"
 
       # ------------------ HEALTH CHECK ------------------
       - name: Testar ambiente GREEN (simulado)
-        run: |
-          echo "[SIMULAÇÃO] Health check passado para app-green"
+        run: echo "[SIMULAÇÃO] Health check passou para app-green"
 
       # ------------------ PROMOVER GREEN ------------------
       - name: Promover GREEN para produção (simulado)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_KEY }}
-          script: |
-            echo "[SIMULAÇÃO] GREEN promovido para produção"
+        run: echo "[SIMULAÇÃO] GREEN promovido para produção"
 
       # ------------------ ROLLBACK AUTOMÁTICO ------------------
       - name: Rollback (se falhar, simulado)
         if: failure()
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_KEY }}
-          script: |
-            echo "[SIMULAÇÃO] Rollback realizado, app-blue restaurado"
+        run: echo "[SIMULAÇÃO] Rollback realizado, app-blue restaurado"
