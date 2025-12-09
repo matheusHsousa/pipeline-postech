@@ -61,9 +61,8 @@ jobs:
           cd /tmp/dc
           wget -q https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip
           unzip dependency-check-10.0.4-release.zip
-          DC_DIR=$(ls -d dependency-check*)
           sudo rm -rf /opt/dependency-check
-          sudo mv "$DC_DIR" /opt/dependency-check
+          sudo mv dependency-check /opt/dependency-check
           sudo chmod -R +x /opt/dependency-check/bin
 
       # ------------------ EXECUTAR SCAN SEM NVD ------------------
